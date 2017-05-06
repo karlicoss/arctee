@@ -57,7 +57,7 @@ def main():
     args = parser.parse_args()
     # TODO check for dir existence
     if not os.path.exists(args.dir):
-        raise RuntimeError("Directory {} doesn't exist!".format(dir))
+        raise RuntimeError("Directory {} doesn't exist!".format(args.dir))
     backup(args.dir, args.prefix, args.command)
 
 
