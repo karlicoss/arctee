@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.6
 import argparse
 import datetime
 import logging
@@ -19,13 +19,15 @@ logger = logging.getLogger('backup-wrapper')
 def backup(dir_: str, prefix: str, command: str):
     pname, ext = prefix.split('.')  # TODO meh
 
-    logger.debug("Running {}".format(command))
-    p = Popen(command, shell=True, stdout=subprocess.PIPE)
+    logger.debug(f"Running {command}")
+    p = Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     # TODO make sure err gets printed out
-    out, _ = p.communicate()
+    out, err = p.communicate()
+
+    logger.info(f"Stderr: {err.decode('ascii')}")
 
     if p.returncode != 0:
-        raise RuntimeError("Return code of the command was {}".format(p.returncode))
+        raise RuntimeError(f"Return code of the command was {p.returncode}")
 
     today = datetime.date.today()
     path = PosixPath(dir_, pname + "_" + str(today) + "." + ext)
@@ -69,5 +71,6 @@ def setup_logger():
         logger.warning("coloredlogs is unavailable!")
 
 
+        # TODO kython setup logging?
 setup_logger()
 main()
