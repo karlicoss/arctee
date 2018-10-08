@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.6
 import argparse
-import datetime
+from datetime import datetime
 import logging
 import os.path
 from pathlib import PosixPath
@@ -10,67 +10,71 @@ from subprocess import Popen
 # todo pip atomicwrites
 # from atomicwrites import atomic_write
 # TODO can't use at the moment since it doesn't seem to support binary writing :(
-# command just pipes output
-# TODO coloredlogs?
 
 logger = logging.getLogger('backup-wrapper')
 
 
-def backup(dir_: str, prefix: str, command: str):
+def backup(dir_: str, prefix: str, command: str, datefmt: str):
+    from kython import atomic_write
+
     pname, ext = prefix.split('.')  # TODO meh
 
     logger.debug(f"Running {command}")
     p = Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    # TODO make sure err gets printed out
     out, err = p.communicate()
 
-    logger.info(f"Stderr: {err.decode('ascii')}")
 
+    errmsg = f"Stderr: {err.decode('utf-8')}"
     if p.returncode != 0:
-        raise RuntimeError(f"Return code of the command was {p.returncode}")
+        logger.error(errmsg)
+        raise RuntimeError(f"Non-zero return code: {p.returncode}")
+    else:
+        logger.info(errmsg)
 
-    today = datetime.date.today()
-    path = PosixPath(dir_, pname + "_" + str(today) + "." + ext)
+
+    unow = datetime.utcnow()
+    dates = unow.strftime(datefmt)
+    path = PosixPath(dir_, pname + "_" + dates + "." + ext)
     logger.debug("Writing to " + path.as_posix())
-    with path.open('wb') as fo:
+    with atomic_write(path.as_posix(), 'wb') as fo:
         fo.write(out)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser = argparse.ArgumentParser(description='Generic backup tool')
     parser.add_argument(
         '--dir',
-        default=None, required=True,
+        help="Directory to store backup",
         type=str,
-        help="Directory to store backup"
-       )
+        default=None, required=True,
+    )
     parser.add_argument(
         '--prefix',
-        default=None, required=True,
+        help="Prefix to be prepended",
         type=str,
-        help="Prefix to be prepended"
-       )
+        default=None, required=True,
+    )
     parser.add_argument(
         '--command',
-        default=None, required=True,
+        help="Command to be executed which outputs the data to back up",
         type=str,
-        help="Command to be executed which outputs the data to back up"
-       )
+        default=None, required=True,
+    )
+    parser.add_argument(
+        '--new',
+        help="New timestamp format",
+        action='store_true',
+        default=False, required=False,
+    )
     args = parser.parse_args()
-    # TODO check for dir existence
-    if not os.path.exists(args.dir):
-        raise RuntimeError("Directory {} doesn't exist!".format(args.dir))
-    backup(args.dir, args.prefix, args.command)
+    if not os.path.lexists(args.dir):
+        raise RuntimeError(f"Directory {args.dir} doesn't exist!")
 
+    datefmt = "%Y%m%d%H%M%S" if args.new else "%Y-%m-%d"
+    backup(args.dir, args.prefix, args.command, datefmt)
 
-def setup_logger():
-    try:
-        import coloredlogs
-        coloredlogs.install(level=logging.DEBUG)
-    except ImportError as e:
-        logger.warning("coloredlogs is unavailable!")
+if __name__ == '__main__':
+    from kython.logging import setup_logzero
+    setup_logzero(logger, level=logging.DEBUG)
+    main()
 
-
-        # TODO kython setup logging?
-setup_logger()
-main()
