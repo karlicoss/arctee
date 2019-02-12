@@ -2,6 +2,7 @@
 import argparse
 from datetime import datetime
 import logging
+import time
 import os.path
 from pathlib import PosixPath
 import subprocess
@@ -34,6 +35,9 @@ def backup(dir_: str, prefix: str, command: str, datefmt: str, backoff: int):
         if p.returncode != 0:
             logger.error(errmsg)
             error = f"Non-zero return code: {p.returncode}"
+            if att != backoff - 1:
+                logger.info('sleeping for a bit before retrying...')
+                time.sleep(60 * 3)
         else:
             logger.info(errmsg)
             break
