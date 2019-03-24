@@ -4,13 +4,16 @@ from datetime import datetime
 import logging
 import time
 import os.path
-from pathlib import PosixPath, Path
+from pathlib import Path
+
 import subprocess
-from subprocess import Popen
+from subprocess import Popen, PIPE, check_call
 
 from typing import Optional
 
-from kython import atomic_write
+from tempfile import TemporaryDirectory
+
+from atomicwrites import atomic_write
 from kython.ktyping import PathIsh
 
 # todo pip atomicwrites
@@ -26,14 +29,29 @@ DATEFMT_FULL = "%Y%m%d%H%M%S"
 Compression = Optional[str]
 
 
-def apack(compression: Compression):
-    pass
+def apack(data: bytes, compression: Compression) -> bytes:
+    if compression is None:
+        return data
+    with TemporaryDirectory() as td:
+        res = Path(td).joinpath('result.' + compression)
+        p = Popen([
+            'apack', '-F', compression, str(res),
+        ], stdin=PIPE)
+        _, _ = p.communicate(input=data)
+        assert p.returncode == 0
+
+        return res.read_bytes()
 
 
 def backup(dir_: PathIsh, prefix: str, command: str, datefmt: str, backoff: int, compression: Compression=None):
+    bdir = Path(dir_)
+
     logger = get_logger()
 
     pname, ext = prefix.split('.')  # TODO meh
+
+    if compression is not None:
+        ext += '.' + compression
 
     stdout = None
     stderr = None
@@ -55,15 +73,16 @@ def backup(dir_: PathIsh, prefix: str, command: str, datefmt: str, backoff: int,
             break
     if error is not None:
         raise RuntimeError(error)
+    assert stdout is not None
+
+    stdout = apack(data=stdout, compression=compression)
 
     unow = datetime.utcnow()
     dates = unow.strftime(datefmt)
-    path = PosixPath(dir_, pname + "_" + dates + "." + ext)
+    path = bdir.joinpath(pname + "_" + dates + "." + ext)
     logger.debug("Writing to " + path.as_posix())
-
     # TODO use renaming instead? might be easier...
-
-    with atomic_write(path.as_posix(), 'wb') as fo:
+    with atomic_write(path.as_posix(), mode='wb', overwrite=True) as fo:
         fo.write(stdout)
 
 
@@ -88,8 +107,8 @@ def test(tmp_path):
     assert ff.stat().st_size == 1000
 
     run(compression='xz')
-    [cz] = list(bdir.glob('*.xz'))
-    assert ff.stat().st_size == 'xxx' # TODO FIXME
+    [xz] = list(bdir.glob('*.xz'))
+    assert xz.stat().st_size == 76
 
 
 def main():
