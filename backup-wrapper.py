@@ -4,11 +4,14 @@ from datetime import datetime
 import logging
 import time
 import os.path
-from pathlib import PosixPath
+from pathlib import PosixPath, Path
 import subprocess
 from subprocess import Popen
 
+from typing import Optional
+
 from kython import atomic_write
+from kython.ktyping import PathIsh
 
 # todo pip atomicwrites
 # from atomicwrites import atomic_write
@@ -18,7 +21,16 @@ def get_logger():
     return logging.getLogger('backup-wrapper')
 
 
-def backup(dir_: str, prefix: str, command: str, datefmt: str, backoff: int):
+DATEFMT_FULL = "%Y%m%d%H%M%S"
+
+Compression = Optional[str]
+
+
+def apack(compression: Compression):
+    pass
+
+
+def backup(dir_: PathIsh, prefix: str, command: str, datefmt: str, backoff: int, compression: Compression=None):
     logger = get_logger()
 
     pname, ext = prefix.split('.')  # TODO meh
@@ -48,12 +60,40 @@ def backup(dir_: str, prefix: str, command: str, datefmt: str, backoff: int):
     dates = unow.strftime(datefmt)
     path = PosixPath(dir_, pname + "_" + dates + "." + ext)
     logger.debug("Writing to " + path.as_posix())
+
+    # TODO use renaming instead? might be easier...
+
     with atomic_write(path.as_posix(), 'wb') as fo:
         fo.write(stdout)
 
 
+def test(tmp_path):
+    tdir = Path(tmp_path)
+    bdir = tdir.joinpath('backup')
+    bdir.mkdir()
+
+    def run(**kwargs):
+        backup(
+            bdir,
+            prefix='testing.txt',
+            command='printf "{}"'.format('0' * 1000),
+            datefmt=DATEFMT_FULL,
+            # TODO test backoff?
+            backoff=1,
+            **kwargs,
+        )
+
+    run(compression=None)
+    [ff] = list(bdir.glob('*.txt'))
+    assert ff.stat().st_size == 1000
+
+    run(compression='xz')
+    [cz] = list(bdir.glob('*.xz'))
+    assert ff.stat().st_size == 'xxx' # TODO FIXME
+
+
 def main():
-    from kython.logging import setup_logzero
+    from kython.klogging import setup_logzero
     setup_logzero(get_logger(), level=logging.DEBUG)
 
     parser = argparse.ArgumentParser(description='Generic backup tool')
@@ -86,12 +126,16 @@ def main():
         type=int,
         default=1,
     )
+    parser.add_argument(
+        '--compression',
+        default=None,
+    )
     args = parser.parse_args()
     if not os.path.lexists(args.dir):
         raise RuntimeError(f"Directory {args.dir} doesn't exist!")
 
-    datefmt = "%Y%m%d%H%M%S" if args.new else "%Y-%m-%d"
-    backup(args.dir, args.prefix, args.command, datefmt, backoff=args.backoff)
+    datefmt = DATEFMT_FULL if args.new else "%Y-%m-%d"
+    backup(args.dir, args.prefix, args.command, datefmt, backoff=args.backoff, compression=args.compression)
 
 if __name__ == '__main__':
     main()
