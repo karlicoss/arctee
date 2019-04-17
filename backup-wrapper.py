@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 import argparse
 from datetime import datetime
 import logging
@@ -42,6 +42,36 @@ def apack(data: bytes, compression: Compression) -> bytes:
 
         return res.read_bytes()
 
+import backoff # type: ignore
+
+# hacky way to make backoff retries dynamic...
+class RetryMe(Exception):
+    pass
+
+
+def backoff_n_times(f, attempts: int):
+    @backoff.on_exception(backoff.expo, RetryMe, max_tries=attempts)
+    def _do():
+        return f()
+    return _do
+
+
+def do_command(command: str):
+    logger = get_logger()
+    logger.debug(f"Running {command}")
+    p = Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = p.communicate()
+
+    errmsg = f"Stderr: {stderr.decode('utf8')}"
+    if p.returncode != 0:
+        logger.error(errmsg)
+        logger.error(f"Stdout: {stdout.decode('utf8')}")
+        error = f"Non-zero return code: {p.returncode}"
+        raise RetryMe
+
+    logger.info(errmsg)
+    return stdout
+
 
 def backup(dir_: PathIsh, prefix: str, command: str, datefmt: str, backoff: int, compression: Compression=None):
     bdir = Path(dir_)
@@ -53,27 +83,7 @@ def backup(dir_: PathIsh, prefix: str, command: str, datefmt: str, backoff: int,
     if compression is not None:
         ext += '.' + compression
 
-    stdout = None
-    stderr = None
-    error = None
-    for att in range(backoff):
-        logger.debug(f"Running {command}, attempt {att + 1}/{backoff}")
-        p = Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = p.communicate()
-
-        errmsg = f"Stderr: {stderr.decode('utf-8')}"
-        if p.returncode != 0:
-            logger.error(errmsg)
-            error = f"Non-zero return code: {p.returncode}"
-            if att != backoff - 1:
-                logger.info('sleeping for a bit before retrying...')
-                time.sleep(60 * 3)
-        else:
-            logger.info(errmsg)
-            break
-    if error is not None:
-        raise RuntimeError(error)
-    assert stdout is not None
+    stdout = backoff_n_times(lambda: do_command(command), attempts=backoff)()
 
     stdout = apack(data=stdout, compression=compression)
 
@@ -114,6 +124,7 @@ def test(tmp_path):
 def main():
     from kython.klogging import setup_logzero
     setup_logzero(get_logger(), level=logging.DEBUG)
+    setup_logzero(logging.getLogger('backoff'), level=logging.DEBUG)
 
     parser = argparse.ArgumentParser(description='Generic backup tool')
     parser.add_argument(
