@@ -72,6 +72,11 @@ def do_command(command: str):
     logger.info(errmsg)
     return stdout
 
+def get_stdout(command: str, backoff: int, compression: Compression=None):
+    stdout = backoff_n_times(lambda: do_command(command), attempts=backoff)()
+    stdout = apack(data=stdout, compression=compression)
+    return stdout
+
 
 def backup(dir_: PathIsh, prefix: str, command: str, datefmt: str, backoff: int, compression: Compression=None):
     bdir = Path(dir_)
@@ -83,9 +88,7 @@ def backup(dir_: PathIsh, prefix: str, command: str, datefmt: str, backoff: int,
     if compression is not None:
         ext += '.' + compression
 
-    stdout = backoff_n_times(lambda: do_command(command), attempts=backoff)()
-
-    stdout = apack(data=stdout, compression=compression)
+    stdout = get_stdout(command, backoff, compression)
 
     unow = datetime.utcnow()
     dates = unow.strftime(datefmt)
@@ -121,11 +124,25 @@ def test(tmp_path):
     assert xz.stat().st_size == 76
 
 
-def main():
+def setup_parser(parser):
+    parser.add_argument(
+        '--backoff',
+        type=int,
+        default=1,
+    )
+    parser.add_argument(
+        '--compression',
+        default=None,
+    )
+
+
+def setup_logging():
     from kython.klogging import setup_logzero
     setup_logzero(get_logger(), level=logging.DEBUG)
     setup_logzero(logging.getLogger('backoff'), level=logging.DEBUG)
 
+
+def main():
     parser = argparse.ArgumentParser(description='Generic backup tool')
     parser.add_argument(
         '--dir',
@@ -151,19 +168,11 @@ def main():
         action='store_true',
         default=False, required=False,
     )
-    parser.add_argument(
-        '--backoff',
-        type=int,
-        default=1,
-    )
-    parser.add_argument(
-        '--compression',
-        default=None,
-    )
     args = parser.parse_args()
     if not os.path.lexists(args.dir):
         raise RuntimeError(f"Directory {args.dir} doesn't exist!")
 
+    setup_parser(parser)
     datefmt = DATEFMT_FULL if args.new else "%Y-%m-%d"
     backup(args.dir, args.prefix, args.command, datefmt, backoff=args.backoff, compression=args.compression)
 
