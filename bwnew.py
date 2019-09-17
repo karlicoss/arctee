@@ -33,7 +33,7 @@ def main():
 
 
     import argparse
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     # TODO FIXME add placeholders doc
     # TODO make it positional?
     p.add_argument('--path', type=str, help="""
@@ -55,9 +55,10 @@ https://github.com/borgbackup/borg/blob/d02356e9c06f980b3d53459c6cc9c264d23d499e
 
     command = args.command
     # https://stackoverflow.com/questions/25872515/python-argparse-treat-arguments-in-different-ways#comment52606932_25873028
-    if command == '--':
+    if command[0] == '--':
         del command[0]
 
+    assert len(command) > 0
     commands = ' '.join(command) # TODO use check_call instead?
 
     assert args.compression is None # TODO support later..
@@ -65,8 +66,6 @@ https://github.com/borgbackup/borg/blob/d02356e9c06f980b3d53459c6cc9c264d23d499e
     stdout = get_stdout(command=commands, backoff=args.backoff, compression=args.compression)
 
     path = replace_placeholders(path)
-
-    backup(args.dir, args.prefix, command, datefmt, backoff=args.backoff, compression=args.compression)
 
     logger.debug("writing to %s", path)
 
