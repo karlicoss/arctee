@@ -168,11 +168,11 @@ def main():
         action='store_true',
         default=False, required=False,
     )
+    setup_parser(parser)
     args = parser.parse_args()
     if not os.path.lexists(args.dir):
         raise RuntimeError(f"Directory {args.dir} doesn't exist!")
 
-    setup_parser(parser)
     datefmt = DATEFMT_FULL if args.new else "%Y-%m-%d"
     backup(args.dir, args.prefix, args.command, datefmt, backoff=args.backoff, compression=args.compression)
 
