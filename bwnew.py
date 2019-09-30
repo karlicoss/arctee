@@ -27,7 +27,7 @@ def replace_placeholders(s) -> str:
 
 
 def main():
-    from backup_wrapper import setup_parser, backup, get_stdout, setup_logging, get_logger
+    from backup_wrapper import setup_parser, get_stdout, setup_logging, get_logger, apack
     setup_logging()
     logger = get_logger()
 
@@ -60,8 +60,6 @@ https://github.com/borgbackup/borg/blob/d02356e9c06f980b3d53459c6cc9c264d23d499e
 
     assert len(command) > 0
     commands = ' '.join(command) # TODO use check_call instead?
-
-    assert args.compression is None # TODO support later..
 
     stdout = get_stdout(command=commands, backoff=args.backoff, compression=args.compression)
 
