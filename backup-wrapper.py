@@ -14,17 +14,12 @@ from typing import Optional
 from tempfile import TemporaryDirectory
 
 from atomicwrites import atomic_write
-from kython.ktyping import PathIsh
 
 # todo pip atomicwrites
-# from atomicwrites import atomic_write
-# TODO can't use at the moment since it doesn't seem to support binary writing :(
 
 def get_logger():
     return logging.getLogger('backup-wrapper')
 
-
-DATEFMT_FULL = "%Y%m%d%H%M%S"
 
 Compression = Optional[str]
 
@@ -78,38 +73,18 @@ def get_stdout(command: str, backoff: int, compression: Compression=None):
     return stdout
 
 
-def backup(dir_: PathIsh, prefix: str, command: str, datefmt: str, backoff: int, compression: Compression=None):
-    bdir = Path(dir_)
-
-    logger = get_logger()
-
-    pname, ext = prefix.split('.')  # TODO meh
-
-    if compression is not None:
-        ext += '.' + compression
-
-    stdout = get_stdout(command, backoff, compression)
-
-    unow = datetime.utcnow()
-    dates = unow.strftime(datefmt)
-    path = bdir.joinpath(pname + "_" + dates + "." + ext)
-    logger.debug("Writing to " + path.as_posix())
-    # TODO use renaming instead? might be easier...
-    with atomic_write(path.as_posix(), mode='wb', overwrite=True) as fo:
-        fo.write(stdout)
-
-
 def test(tmp_path):
     tdir = Path(tmp_path)
     bdir = tdir.joinpath('backup')
     bdir.mkdir()
 
     def run(**kwargs):
-        backup(
+        # TODO fix the test
+        # pylint: disable=undefined-variable
+        backup( # type: ignore
             bdir,
             prefix='testing.txt',
             command='printf "{}"'.format('0' * 1000),
-            datefmt=DATEFMT_FULL,
             # TODO test backoff?
             backoff=1,
             **kwargs,
@@ -140,42 +115,3 @@ def setup_logging():
     from kython.klogging import setup_logzero
     setup_logzero(get_logger(), level=logging.DEBUG)
     setup_logzero(logging.getLogger('backoff'), level=logging.DEBUG)
-
-
-def main():
-    parser = argparse.ArgumentParser(description='Generic backup tool')
-    parser.add_argument(
-        '--dir',
-        help="Directory to store backup",
-        type=str,
-        default=None, required=True,
-    )
-    parser.add_argument(
-        '--prefix',
-        help="Prefix to be prepended",
-        type=str,
-        default=None, required=True,
-    )
-    parser.add_argument(
-        '--command',
-        help="Command to be executed which outputs the data to back up",
-        type=str,
-        default=None, required=True,
-    )
-    parser.add_argument(
-        '--new',
-        help="New timestamp format",
-        action='store_true',
-        default=False, required=False,
-    )
-    setup_parser(parser)
-    args = parser.parse_args()
-    if not os.path.lexists(args.dir):
-        raise RuntimeError(f"Directory {args.dir} doesn't exist!")
-
-    datefmt = DATEFMT_FULL if args.new else "%Y-%m-%d"
-    backup(args.dir, args.prefix, args.command, datefmt, backoff=args.backoff, compression=args.compression)
-
-if __name__ == '__main__':
-    main()
-
