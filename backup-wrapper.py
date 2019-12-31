@@ -13,9 +13,7 @@ from typing import Optional
 
 from tempfile import TemporaryDirectory
 
-from atomicwrites import atomic_write
 
-# todo pip atomicwrites
 
 def get_logger():
     return logging.getLogger('backup-wrapper')
@@ -71,32 +69,6 @@ def get_stdout(command: str, backoff: int, compression: Compression=None):
     stdout = backoff_n_times(lambda: do_command(command), attempts=backoff)()
     stdout = apack(data=stdout, compression=compression)
     return stdout
-
-
-def test(tmp_path):
-    tdir = Path(tmp_path)
-    bdir = tdir.joinpath('backup')
-    bdir.mkdir()
-
-    def run(**kwargs):
-        # TODO fix the test
-        # pylint: disable=undefined-variable
-        backup( # type: ignore
-            bdir,
-            prefix='testing.txt',
-            command='printf "{}"'.format('0' * 1000),
-            # TODO test backoff?
-            backoff=1,
-            **kwargs,
-        )
-
-    run(compression=None)
-    [ff] = list(bdir.glob('*.txt'))
-    assert ff.stat().st_size == 1000
-
-    run(compression='xz')
-    [xz] = list(bdir.glob('*.xz'))
-    assert xz.stat().st_size == 76
 
 
 def setup_parser(parser):
