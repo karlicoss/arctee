@@ -1,0 +1,3 @@
+Stdout gets written into a file, stderr gets passes through
+
+* TODO Usage

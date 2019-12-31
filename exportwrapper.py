@@ -6,8 +6,8 @@ from subprocess import Popen, PIPE, run, CalledProcessError, check_output
 from typing import Sequence, Optional
 
 
-# todo pip atomicwrites
 from atomicwrites import atomic_write
+import backoff # type: ignore
 
 
 def get_logger():
@@ -15,10 +15,7 @@ def get_logger():
 
 
 def setup_logging():
-    # TODO FIXME remove this
-    from kython.klogging import setup_logzero
-    setup_logzero(get_logger(), level=logging.DEBUG)
-    setup_logzero(logging.getLogger('backoff'), level=logging.DEBUG)
+    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
 
 _ISO_FORMAT = '%Y%m%dT%H%M%SZ'
@@ -83,8 +80,7 @@ def do_command(command: str) -> bytes:
 
 
 def get_stdout(*, retries: int, compression: Compression, command: str):
-    import backoff # type: ignore
-    retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries)
+    retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries, logger=get_logger())
     stdout = retrier(lambda: do_command(command))()
     stdout = apack(data=stdout, compression=compression)
     return stdout
@@ -99,13 +95,16 @@ def do_export(
 ) -> None:
     logger = get_logger()
     assert len(command) > 0
-    commands = ' '.join(command)  # deliberate shell-like behaviour
+
+    from shlex import quote # TODO ok, careful about it...
+
+    commands = ' '.join(map(quote, command))  # deliberate shell-like behaviour
 
     stdout = get_stdout(command=commands, retries=retries, compression=compression)
 
     path = replace_placeholders(path)
 
-    logger.debug("writing to %s", path)
+    logger.debug("writing %d bytes to %s", len(stdout), path)
 
     with atomic_write(path, mode='wb', overwrite=True) as fo:
         fo.write(stdout)
@@ -143,6 +142,7 @@ See man apack for list of supported formats.
 '''.strip(),
         default=None,
     )
+    # TODO hmm, need to prevent splitting
     p.add_argument('command', nargs=argparse.REMAINDER, help='Rest of the arguments are the actual command to run')
 
     args = p.parse_args()
@@ -160,14 +160,8 @@ See man apack for list of supported formats.
     do_export(path=path, retries=args.retries, compression=args.compression, command=command)
 
 
-if __name__ == '__main__':
-    main()
-
-
 def test(tmp_path):
-    tdir = Path(tmp_path)
-    bdir = tdir.joinpath('backup')
-    bdir.mkdir()
+    bdir = Path(tmp_path)
 
     def run(**kwargs):
         do_export(
@@ -188,3 +182,27 @@ def test(tmp_path):
     [xz] = list(bdir.glob('*.txt'))
     assert xz.stat().st_size == 76
 
+
+def test_retry(tmp_path):
+    """
+    Ideally, should fail for a while and then succeed.
+
+    # eh. do not run on ci? not sure..
+    """
+    bdir = Path(tmp_path)
+
+    from subprocess import check_call
+
+    cmd = [
+        __file__,
+        '-c', 'xz',
+        '--retries', '10',  # TODO
+        '--path', str(bdir / 'xxx_{utcnow}.html.xz'),
+        '--',
+        'bash', '-c', '((RANDOM % 3 == 0)) && cat /usr/share/doc/python3/html/bugs.html',
+    ]
+    check_call(cmd)
+
+
+if __name__ == '__main__':
+    main()
