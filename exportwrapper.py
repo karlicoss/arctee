@@ -2,8 +2,7 @@
 import argparse
 from pathlib import Path
 import logging
-from subprocess import Popen, PIPE, run, CalledProcessError
-from tempfile import TemporaryDirectory
+from subprocess import Popen, PIPE, run, CalledProcessError, check_output
 from typing import Sequence, Optional
 
 
@@ -56,16 +55,12 @@ Compression = Optional[str]
 def apack(data: bytes, compression: Compression) -> bytes:
     if compression is None:
         return data
-    # TODO FIXME remove tmp dir crap...
-    with TemporaryDirectory() as td:
-        res = Path(td).joinpath('result.' + compression)
-        p = Popen([
-            'apack', '-F', compression, str(res),
-        ], stdin=PIPE)
-        _, _ = p.communicate(input=data)
-        assert p.returncode == 0
-
-        return res.read_bytes()
+    else:
+        return check_output([
+            'apack',
+            '-F', compression,
+            '-f', '/dev/stdout',  # -f flag to convince to 'overwrite' stdout
+        ], input=data)
 
 
 def do_command(command: str) -> bytes:
@@ -87,7 +82,7 @@ def do_command(command: str) -> bytes:
     return r.stdout
 
 
-def get_stdout(command: str, retries: int, compression: Compression=None):
+def get_stdout(*, retries: int, compression: Compression, command: str):
     import backoff # type: ignore
     retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries)
     stdout = retrier(lambda: do_command(command))()
