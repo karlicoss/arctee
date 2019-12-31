@@ -2,8 +2,7 @@
 import argparse
 from pathlib import Path
 import logging
-import subprocess
-from subprocess import Popen, PIPE, check_call
+from subprocess import Popen, PIPE, run, CalledProcessError
 from tempfile import TemporaryDirectory
 from typing import Sequence, Optional
 
@@ -50,6 +49,7 @@ def replace_placeholders(s) -> str:
     }
     return s.format(**pdict)
 
+
 Compression = Optional[str]
 
 
@@ -68,40 +68,30 @@ def apack(data: bytes, compression: Compression) -> bytes:
         return res.read_bytes()
 
 
-import backoff # type: ignore
-
-# hacky way to make backoff retries dynamic...
-class RetryMe(Exception):
-    pass
-
-
-def backoff_n_times(f, attempts: int):
-    # TODO FIXME more straighforward?
-    @backoff.on_exception(backoff.expo, RetryMe, max_tries=attempts)
-    def _do():
-        return f()
-    return _do
-
-
-def do_command(command: str):
+def do_command(command: str) -> bytes:
     logger = get_logger()
-    logger.debug(f"Running {command}")
-    p = Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = p.communicate()
+    logger.debug(f"Running '{command}'")
 
-    errmsg = f"Stderr: {stderr.decode('utf8')}"
-    if p.returncode != 0:
+    r = run(command, shell=True, stdout=PIPE, stderr=PIPE)
+
+    errmsg = f"Stderr: {r.stderr.decode('utf8')}"
+    if r.returncode != 0:
         logger.error(errmsg)
-        logger.error(f"Stdout: {stdout.decode('utf8')}")
-        error = f"Non-zero return code: {p.returncode}"
-        raise RetryMe
+        logger.error(f"Stdout: {r.stdout.decode('utf8')}")
+        error = f"Non-zero return code: {r.returncode}"
+        logger.error(error)
+        r.check_returncode()
+        raise AssertionError("shouldn't happen")
 
     logger.info(errmsg)
-    return stdout
+    return r.stdout
 
 
-def get_stdout(command: str, backoff: int, compression: Compression=None):
-    stdout = backoff_n_times(lambda: do_command(command), attempts=backoff)()
+# TODO FIXME rename --backoff argument?
+def get_stdout(command: str, retries: int, compression: Compression=None):
+    import backoff # type: ignore
+    retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries)
+    stdout = retrier(lambda: do_command(command))()
     stdout = apack(data=stdout, compression=compression)
     return stdout
 
@@ -117,7 +107,7 @@ def do_export(
     assert len(command) > 0
     commands = ' '.join(command)  # deliberate shell-like behaviour
 
-    stdout = get_stdout(command=commands, backoff=backoff, compression=compression)
+    stdout = get_stdout(command=commands, retries=backoff, compression=compression)
 
     path = replace_placeholders(path)
 
