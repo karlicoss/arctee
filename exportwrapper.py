@@ -87,7 +87,6 @@ def do_command(command: str) -> bytes:
     return r.stdout
 
 
-# TODO FIXME rename --backoff argument?
 def get_stdout(command: str, retries: int, compression: Compression=None):
     import backoff # type: ignore
     retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries)
@@ -99,7 +98,7 @@ def get_stdout(command: str, retries: int, compression: Compression=None):
 def do_export(
         *,
         path: str,
-        backoff: int,
+        retries: int,
         compression: Compression,
         command: Sequence[str],
 ) -> None:
@@ -107,7 +106,7 @@ def do_export(
     assert len(command) > 0
     commands = ' '.join(command)  # deliberate shell-like behaviour
 
-    stdout = get_stdout(command=commands, retries=backoff, compression=compression)
+    stdout = get_stdout(command=commands, retries=retries, compression=compression)
 
     path = replace_placeholders(path)
 
@@ -117,30 +116,39 @@ def do_export(
         fo.write(stdout)
 
 
-
 def main():
     setup_logging()
 
-    p = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    # TODO FIXME add placeholders doc
-    p.add_argument('--path', type=str, help="""
-Path with borg-style placeholders
+    p = argparse.ArgumentParser(
+        description='Wrapper for automating routine for reliable and regular data exports', # TODO link?
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    pss = ', '.join("{" + p +  "}" for p in PLACEHOLDERS)
+    p.add_argument('--path', type=str, required=True, help=f"""
+Path with borg-style placeholders. Supported: {pss}.
+
+Example: --path '/exports/pocket/pocket_{{utcnow}}.json'
 
 (see https://manpages.debian.org/testing/borgbackup/borg-placeholders.1.en.html)
-""")
+""".strip())
     # TODO add argument to treat path as is?
     p.add_argument(
-        '--backoff',
+        '--retries',
+        help='Number of retries with exponential backoff before failing',
         type=int,
         default=1,
     )
     # TODO eh, ignore it?
     p.add_argument(
         '-c', '--compression',
-        help='set compression format (see man apack)',
+        help='''
+Set compression format (passed to 'apack -F').
+
+See man apack for list of supported formats.
+'''.strip(),
         default=None,
     )
-    p.add_argument('command', nargs=argparse.REMAINDER)
+    p.add_argument('command', nargs=argparse.REMAINDER, help='Rest of the arguments are the actual command to run')
 
     args = p.parse_args()
 
@@ -154,7 +162,7 @@ Path with borg-style placeholders
     if command[0] == '--':
         del command[0]
 
-    do_export(path=path, backoff=args.backoff, compression=args.compression, command=command)
+    do_export(path=path, retries=args.retries, compression=args.compression, command=command)
 
 
 if __name__ == '__main__':
@@ -169,7 +177,7 @@ def test(tmp_path):
     def run(**kwargs):
         do_export(
             path=str(bdir / 'test_{utcnow}_{hostname}.txt'),
-            backoff=1,
+            retries=1,
             # TODO test backoff?
             command=['printf', '0' * 1000],
             **kwargs,
