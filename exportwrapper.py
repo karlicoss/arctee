@@ -6,28 +6,31 @@ You can read more on how it's used [[https://beepb00p.xyz/exports.html][here]].
 # TODO more specific link?
 
 * Motivation
-Minimizing common boilerplate while exporting plaintext data from APIs.
+Many things are very common to all data exports, regardless the source.
+This script aims to minimize common boilerplate during exporting plaintext data from APIs.
 
-- =path= argument allows easy timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
-- =--compression= allows to compress simply by passing format. No more tar -zcvf!
+- =path= argument allows easy ISO8601 timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
+- =--compression= allows to compress simply by passing format. No more =tar -zcvf=!
 - =--retries= allows easy exponential backoff in case service you're querying is flaky.
 
 Example:
 
 : exportwrapper '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
 
-- runs =/soft/export/rememberthemilk.py=, retrying it up to three times if it fails
-- once the data is fetched it's compressed as =xz=
-- timestamp is computed and compressed data is written to =/exports/rtm/20200102T170015Z.ical.xz=
+1. runs =/soft/export/rememberthemilk.py=, retrying it up to three times if it fails
+
+   The script is expected to dump its result in stdout; stderr is simply passed through.
+2. once the data is fetched it's compressed as =xz=
+3. timestamp is computed and compressed data is written to =/exports/rtm/20200102T170015Z.ical.xz=
 
 * Do you really need a special script for that?
 
 - why not use =date= command for timestamps?
 
-  passing ="$(date -Iseconds --utc).json"= as path works, however I need it for *most* of my exports; it ends up polluting my crontabs.
+  passing =$(date -Iseconds --utc).json= as =path= works, however I need it for *most* of my exports; so it ends up polluting my crontabs.
 
-Next,I want to do several things one after another here.
-That sounds like a perfect candidate for pipes, right?
+Next, I want to do several things one after another here.
+That sounds like a perfect candidate for *pipes*, right?
 Sadly, there are serious caveats:
 
 - if one parts of your pipe fail, it doesn't fail everything
@@ -37,7 +40,7 @@ Sadly, there are serious caveats:
   In bash you can fix this by setting =set -o pipefail=. However:
 
   - default cron shell is =/bin/sh=. Ok, you can change it to ~SHELL=/bin/bash~, but
-  - you can't set ~SHELL="/bin/bash -o pipefail"~
+  - you can't set it to =/bin/bash -o pipefail=
 
     You'd have to prepend all of your pipes with =set -o pipefail=, which is quite boilerplaty
 
