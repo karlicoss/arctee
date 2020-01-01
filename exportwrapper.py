@@ -2,32 +2,33 @@
 """
 Helper script to run your data exports.
 
-You can read more on how it's used TODO
+You can read more on how it's used [[https://beepb00p.xyz/exports.html][here]].
+# TODO more specific link?
 
 * Motivation
-Minimizing common boilerplate while exporting plaintext data from APIs
+Minimizing common boilerplate while exporting plaintext data from APIs.
 
-- =--path= allows easy timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
+- =path= argument allows easy timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
 - =--compression= allows to compress simply by passing format. No more tar -zcvf!
 - =--retries= allows easy exponential backoff in case service you're querying is flaky.
 
-* Dependencies
-- =pip3 install --user atomicwrites=
-  [[https://github.com/untitaker/python-atomicwrites][atomicwrites]] is a library for portable atomic file writing
-- =pip3 install --user backoff=
-  [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying
-- =apt install atools=
-  [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format
+Example:
 
-* Why do you need a special script for that?
+: exportwrapper '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
 
-- why not use `date` command for timestamps?
+- runs =/soft/export/rememberthemilk.py=, retrying it up to three times if it fails
+- once the data is fetched it's compressed as =xz=
+- timestamp is computed and compressed data is written to =/exports/rtm/20200102T170015Z.ical.xz=
 
-  something like =--path "$(date -Iseconds --utc).json" works, however I need it for *most* of my exports; it ends up polluting my crontabs.
+* Do you really need a special script for that?
 
-Next,I want to do three independent things in row here.
+- why not use =date= command for timestamps?
+
+  passing ="$(date -Iseconds --utc).json"= as path works, however I need it for *most* of my exports; it ends up polluting my crontabs.
+
+Next,I want to do several things one after another here.
 That sounds like a perfect candidate for pipes, right?
-Sadly, there are caveats:
+Sadly, there are serious caveats:
 
 - if one parts of your pipe fail, it doesn't fail everything
 
@@ -46,7 +47,7 @@ Sadly, there are caveats:
 
 - it's possible to use pipes for atomically writing output to a file, however I haven't found any existing tools to do that
 
-  E.g. I want something like =curl https://some.api/get-data | atomically --path /path/to/data.sjon=.
+  E.g. I want something like =curl https://some.api/get-data | tee --atomic /path/to/data.sjon=.
 
   If you know any existing tool please let me know!
 
@@ -55,6 +56,18 @@ Sadly, there are caveats:
   However due to the above concerns (timestamping/retrying/atomic writing), it has to be part of the script as well.
 
 If you think any of these things can be simplified, I'd be happy to know and remove them in favor of more standard solutions!
+
+
+* Dependencies
+- =pip3 install --user atomicwrites=
+
+  [[https://github.com/untitaker/python-atomicwrites][atomicwrites]] is a library for portable atomic file writing
+- =pip3 install --user backoff=
+
+  [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying
+- =apt install atools=
+
+  [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format
 """
 
 import argparse
@@ -172,21 +185,27 @@ def main():
     setup_logging()
 
     p = argparse.ArgumentParser(
-        description='Wrapper for automating routine for reliable and regular data exports', # TODO link?
+        description='''
+Wrapper for automating boilerplate for reliable and regular data exports.
+
+Example: exportwrapper '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
+'''.strip(),
+ # TODO link?
+        # TODO rename to exportto?
         formatter_class=argparse.RawTextHelpFormatter,
     )
     pss = ', '.join("{" + p + "}" for p in PLACEHOLDERS)
-    p.add_argument('--path', type=str, required=True, help=f"""
+    p.add_argument('path', type=str, help=f"""
 Path with borg-style placeholders. Supported: {pss}.
 
-Example: --path '/exports/pocket/pocket_{{utcnow}}.json'
+Example: '/exports/pocket/pocket_{{utcnow}}.json'
 
 (see https://manpages.debian.org/testing/borgbackup/borg-placeholders.1.en.html)
 """.strip())
     # TODO add argument to treat path as is?
     p.add_argument(
         '-r', '--retries',
-        help='Number of retries with exponential backoff before failing',
+        help='Number of retries (exponential backoff)',
         type=int,
         default=1,
     )
@@ -201,7 +220,7 @@ See man apack for list of supported formats.
         default=None,
     )
     # TODO hmm, need to prevent splitting
-    p.add_argument('command', nargs=argparse.REMAINDER, help='Rest of the arguments are the actual command to run')
+    p.add_argument('command', nargs=argparse.REMAINDER, help='Rest of the arguments are treated as the command to run')
 
     args = p.parse_args()
 
@@ -212,6 +231,7 @@ See man apack for list of supported formats.
 
     command = args.command
     # https://stackoverflow.com/questions/25872515/python-argparse-treat-arguments-in-different-ways#comment52606932_25873028
+
     if command[0] == '--':
         del command[0]
 
@@ -255,7 +275,7 @@ def test_retry(tmp_path):
         __file__,
         '-c', 'xz',
         '--retries', '10',  # TODO
-        '--path', str(bdir / 'xxx_{utcnow}.html.xz'),
+        str(bdir / 'xxx_{utcnow}.html.xz'),
         '--',
         'bash', '-c', '((RANDOM % 3 == 0)) && cat /usr/share/doc/python3/html/bugs.html',
     ]

@@ -1,38 +1,111 @@
 Stdout gets written into a file, stderr gets passes through
 
-#+begin_src python :exports output :results raw drawer
+#+begin_src python :exports output :results replace raw
 import exportwrapper 
 return exportwrapper.__doc__
 #+end_src
 
+#+RESULTS:
 
-#+begin_src sh :results output raw drawer :exports output
+Helper script to run your data exports.
+
+You can read more on how it's used [[https://beepb00p.xyz/exports.html][here]].
+# TODO more specific link?
+
+* Motivation
+Minimizing common boilerplate while exporting plaintext data from APIs.
+
+- =path= argument allows easy timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
+- =--compression= allows to compress simply by passing format. No more tar -zcvf!
+- =--retries= allows easy exponential backoff in case service you're querying is flaky.
+
+Example:
+
+: exportwrapper '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
+
+- runs =/soft/export/rememberthemilk.py=, retrying it up to three times if it fails
+- once the data is fetched it's compressed as =xz=
+- timestamp is computed and compressed data is written to =/exports/rtm/20200102T170015Z.ical.xz=
+
+* Do you really need a special script for that?
+
+- why not use =date= command for timestamps?
+
+  passing ="$(date -Iseconds --utc).json"= as path works, however I need it for *most* of my exports; it ends up polluting my crontabs.
+
+Next,I want to do several things one after another here.
+That sounds like a perfect candidate for pipes, right?
+Sadly, there are serious caveats:
+
+- if one parts of your pipe fail, it doesn't fail everything
+
+  That's a major problem that often leads to unexpected behaviours.
+
+  In bash you can fix this by setting =set -o pipefail=. However:
+
+  - default cron shell is =/bin/sh=. Ok, you can change it to ~SHELL=/bin/bash~, but
+  - you can't set ~SHELL="/bin/bash -o pipefail"~
+
+    You'd have to prepend all of your pipes with =set -o pipefail=, which is quite boilerplaty
+
+- you can't use pipes for retrying; you need some wrapper script anyway
+
+  E.g. similar to how you need a wrapper script when you want to stop your program on timeout.
+
+- it's possible to use pipes for atomically writing output to a file, however I haven't found any existing tools to do that
+
+  E.g. I want something like =curl https://some.api/get-data | tee --atomic /path/to/data.sjon=.
+
+  If you know any existing tool please let me know!
+
+- it's possible to use pipes for compression
+
+  However due to the above concerns (timestamping/retrying/atomic writing), it has to be part of the script as well.
+
+If you think any of these things can be simplified, I'd be happy to know and remove them in favor of more standard solutions!
+
+
+* Dependencies
+- =pip3 install --user atomicwrites=
+
+  [[https://github.com/untitaker/python-atomicwrites][atomicwrites]] is a library for portable atomic file writing
+- =pip3 install --user backoff=
+
+  [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying
+- =apt install atools=
+
+  [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format
+
+
+#+begin_src sh :results output replace :exports output
 ./exportwrapper.py --help
 #+end_src
 
 #+RESULTS:
-:results:
-usage: exportwrapper.py [-h] --path PATH [-r RETRIES] [-c COMPRESSION] ...
+#+begin_example
+usage: exportwrapper.py [-h] [-r RETRIES] [-c COMPRESSION] path ...
 
-Wrapper for automating routine for reliable and regular data exports
+Wrapper for automating boilerplate for reliable and regular data exports.
+
+Example: exportwrapper '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
 
 positional arguments:
-  command               Rest of the arguments are the actual command to run
+  path                  Path with borg-style placeholders. Supported: {utcnow}, {hostname}.
+                        
+                        Example: '/exports/pocket/pocket_{utcnow}.json'
+                        
+                        (see https://manpages.debian.org/testing/borgbackup/borg-placeholders.1.en.html)
+  command               Rest of the arguments are treated as the command to run
 
 optional arguments:
   -h, --help            show this help message and exit
-  --path PATH           Path with borg-style placeholders. Supported: {utcnow}, {hostname}.
-                        
-                        Example: --path '/exports/pocket/pocket_{utcnow}.json'
-                        
-                        (see https://manpages.debian.org/testing/borgbackup/borg-placeholders.1.en.html)
   -r RETRIES, --retries RETRIES
-                        Number of retries with exponential backoff before failing
+                        Number of retries (exponential backoff)
   -c COMPRESSION, --compression COMPRESSION
                         Set compression format (passed to 'apack -F').
                         
                         See man apack for list of supported formats.
-:end:
+#+end_example
 
   
 * TODOs :noexport:
