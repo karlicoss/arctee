@@ -1,3 +1,38 @@
 Stdout gets written into a file, stderr gets passes through
 
-* TODO Usage
+#+begin_src python :exports output :results raw drawer
+import exportwrapper 
+return exportwrapper.__doc__
+#+end_src
+
+
+#+begin_src sh :results output raw drawer :exports output
+./exportwrapper.py --help
+#+end_src
+
+#+RESULTS:
+:results:
+usage: exportwrapper.py [-h] --path PATH [-r RETRIES] [-c COMPRESSION] ...
+
+Wrapper for automating routine for reliable and regular data exports
+
+positional arguments:
+  command               Rest of the arguments are the actual command to run
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --path PATH           Path with borg-style placeholders. Supported: {utcnow}, {hostname}.
+                        
+                        Example: --path '/exports/pocket/pocket_{utcnow}.json'
+                        
+                        (see https://manpages.debian.org/testing/borgbackup/borg-placeholders.1.en.html)
+  -r RETRIES, --retries RETRIES
+                        Number of retries with exponential backoff before failing
+  -c COMPRESSION, --compression COMPRESSION
+                        Set compression format (passed to 'apack -F').
+                        
+                        See man apack for list of supported formats.
+:end:
+
+  
+* TODOs :noexport:

@@ -1,4 +1,62 @@
 #!/usr/bin/env python3
+"""
+Helper script to run your data exports.
+
+You can read more on how it's used TODO
+
+* Motivation
+Minimizing common boilerplate while exporting plaintext data from APIs
+
+- =--path= allows easy timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
+- =--compression= allows to compress simply by passing format. No more tar -zcvf!
+- =--retries= allows easy exponential backoff in case service you're querying is flaky.
+
+* Dependencies
+- =pip3 install --user atomicwrites=
+  [[https://github.com/untitaker/python-atomicwrites][atomicwrites]] is a library for portable atomic file writing
+- =pip3 install --user backoff=
+  [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying
+- =apt install atools=
+  [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format
+
+* Why do you need a special script for that?
+
+- why not use `date` command for timestamps?
+
+  something like =--path "$(date -Iseconds --utc).json" works, however I need it for *most* of my exports; it ends up polluting my crontabs.
+
+Next,I want to do three independent things in row here.
+That sounds like a perfect candidate for pipes, right?
+Sadly, there are caveats:
+
+- if one parts of your pipe fail, it doesn't fail everything
+
+  That's a major problem that often leads to unexpected behaviours.
+
+  In bash you can fix this by setting =set -o pipefail=. However:
+
+  - default cron shell is =/bin/sh=. Ok, you can change it to ~SHELL=/bin/bash~, but
+  - you can't set ~SHELL="/bin/bash -o pipefail"~
+
+    You'd have to prepend all of your pipes with =set -o pipefail=, which is quite boilerplaty
+
+- you can't use pipes for retrying; you need some wrapper script anyway
+
+  E.g. similar to how you need a wrapper script when you want to stop your program on timeout.
+
+- it's possible to use pipes for atomically writing output to a file, however I haven't found any existing tools to do that
+
+  E.g. I want something like =curl https://some.api/get-data | atomically --path /path/to/data.sjon=.
+
+  If you know any existing tool please let me know!
+
+- it's possible to use pipes for compression
+
+  However due to the above concerns (timestamping/retrying/atomic writing), it has to be part of the script as well.
+
+If you think any of these things can be simplified, I'd be happy to know and remove them in favor of more standard solutions!
+"""
+
 import argparse
 from pathlib import Path
 import logging
@@ -117,7 +175,7 @@ def main():
         description='Wrapper for automating routine for reliable and regular data exports', # TODO link?
         formatter_class=argparse.RawTextHelpFormatter,
     )
-    pss = ', '.join("{" + p +  "}" for p in PLACEHOLDERS)
+    pss = ', '.join("{" + p + "}" for p in PLACEHOLDERS)
     p.add_argument('--path', type=str, required=True, help=f"""
 Path with borg-style placeholders. Supported: {pss}.
 
@@ -127,7 +185,7 @@ Example: --path '/exports/pocket/pocket_{{utcnow}}.json'
 """.strip())
     # TODO add argument to treat path as is?
     p.add_argument(
-        '--retries',
+        '-r', '--retries',
         help='Number of retries with exponential backoff before failing',
         type=int,
         default=1,
