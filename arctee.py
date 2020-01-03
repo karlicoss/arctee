@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """
 Helper script to run your data exports.
+It works kind of like [[https://en.wikipedia.org/wiki/Tee_(command)][*tee* command]], but:
 
-You can read more on how it's used [[https://beepb00p.xyz/exports.html][here]].
-# TODO more specific link?
+- *a*: writes output atomically
+- *r*: supports retrying command
+- *c*: supports compressing output
+
+You can read more on how it's used [[https://beepb00p.xyz/exports.html#arctee][here]].
 
 * Motivation
 Many things are very common to all data exports, regardless the source.
-This script aims to minimize common boilerplate during exporting plaintext data from APIs.
+In vast majority of cases you want to fetch some data, save it in a json file long with a timestamp and potentially compress.
+
+This script aims to minimize common boilerplate:
 
 - =path= argument allows easy ISO8601 timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
 - =--compression= allows to compress simply by passing format. No more =tar -zcvf=!
@@ -15,7 +21,7 @@ This script aims to minimize common boilerplate during exporting plaintext data 
 
 Example:
 
-: exportwrapper '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
+: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
 
 1. runs =/soft/export/rememberthemilk.py=, retrying it up to three times if it fails
 
@@ -33,7 +39,7 @@ Next, I want to do several things one after another here.
 That sounds like a perfect candidate for *pipes*, right?
 Sadly, there are serious caveats:
 
-- if one parts of your pipe fail, it doesn't fail everything
+- *pipe errors don't propagate*. If one parts of your pipe fail, it doesn't fail everything
 
   That's a major problem that often leads to unexpected behaviours.
 
@@ -44,7 +50,7 @@ Sadly, there are serious caveats:
 
     You'd have to prepend all of your pipes with =set -o pipefail=, which is quite boilerplaty
 
-- you can't use pipes for retrying; you need some wrapper script anyway
+- you can't use pipes for *retrying*; you need some wrapper script anyway
 
   E.g. similar to how you need a wrapper script when you want to stop your program on timeout.
 
@@ -54,12 +60,12 @@ Sadly, there are serious caveats:
 
   If you know any existing tool please let me know!
 
-- it's possible to use pipes for compression
+- it's possible to pipe compression
 
   However due to the above concerns (timestamping/retrying/atomic writing), it has to be part of the script as well.
 
+It feels that cron isn't a suitable tool for my needs due to pipe handling and the need for retries, however I haven't found a better alternative.
 If you think any of these things can be simplified, I'd be happy to know and remove them in favor of more standard solutions!
-
 
 * Dependencies
 - =pip3 install --user atomicwrites=
@@ -85,7 +91,7 @@ import backoff # type: ignore
 
 
 def get_logger():
-    return logging.getLogger('exportwrapper')
+    return logging.getLogger('arctee')
 
 
 def setup_logging():
@@ -191,7 +197,7 @@ def main():
         description='''
 Wrapper for automating boilerplate for reliable and regular data exports.
 
-Example: exportwrapper '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
+Example: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
 '''.strip(),
  # TODO link?
         # TODO rename to exportto?
