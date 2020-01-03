@@ -93,11 +93,13 @@ If you think any of these things can be simplified, I'd be happy to know and rem
 
 #+RESULTS:
 #+begin_example
-usage: arctee.py [-h] [-r RETRIES] [-c COMPRESSION] path ...
+usage: arctee.py [-h] [-r RETRIES] [-c COMPRESSION] path
 
 Wrapper for automating boilerplate for reliable and regular data exports.
 
-Example: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
+Example: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py --user "user@email.com"
+
+Arguments past '--' are the actuall command to run.
 
 positional arguments:
   path                  Path with borg-style placeholders. Supported: {utcnow}, {hostname}.
@@ -105,7 +107,6 @@ positional arguments:
                         Example: '/exports/pocket/pocket_{utcnow}.json'
                         
                         (see https://manpages.debian.org/testing/borgbackup/borg-placeholders.1.en.html)
-  command               Rest of the arguments are treated as the command to run
 
 optional arguments:
   -h, --help            show this help message and exit

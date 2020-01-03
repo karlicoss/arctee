@@ -197,7 +197,9 @@ def main():
         description='''
 Wrapper for automating boilerplate for reliable and regular data exports.
 
-Example: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
+Example: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py --user "user@email.com"
+
+Arguments past '--' are the actuall command to run.
 '''.strip(),
  # TODO link?
         # TODO rename to exportto?
@@ -228,17 +230,16 @@ See man apack for list of supported formats.
 '''.strip(),
         default=None,
     )
-    # TODO hmm, need to prevent splitting
-    p.add_argument('command', nargs=argparse.REMAINDER, help='Rest of the arguments are treated as the command to run')
 
-    args = p.parse_args()
+    # NOTE: couldn't use argparse.REMAINDER here: it doesn't seem to allow reordering positional and optional args..
+    args, rest = p.parse_known_args()
 
     path = args.path
     # we want to timestamp _after_ we ran the command
-    # s othis is early check for pattern validity, before running the command
+    # so this is early check for pattern validity, before running the command
     replace_placeholders(path)
 
-    command = args.command
+    command = rest
     # https://stackoverflow.com/questions/25872515/python-argparse-treat-arguments-in-different-ways#comment52606932_25873028
 
     if command[0] == '--':
@@ -282,9 +283,9 @@ def test_retry(tmp_path):
 
     cmd = [
         __file__,
+        str(bdir / 'xxx_{utcnow}.html.xz'),
         '-c', 'xz',
         '--retries', '10',  # TODO
-        str(bdir / 'xxx_{utcnow}.html.xz'),
         '--',
         'bash', '-c', '((RANDOM % 3 == 0)) && cat /usr/share/doc/python3/html/bugs.html',
     ]
