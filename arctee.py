@@ -11,7 +11,7 @@ You can read more on how it's used [[https://beepb00p.xyz/exports.html#arctee][h
 
 * Motivation
 Many things are very common to all data exports, regardless the source.
-In vast majority of cases you want to fetch some data, save it in a json file long with a timestamp and potentially compress.
+In the vast majority of cases you want to fetch some data, save it in a json file along with a timestamp and potentially compress.
 
 This script aims to minimize common boilerplate:
 
@@ -74,9 +74,9 @@ If you think any of these things can be simplified, I'd be happy to know and rem
 - =pip3 install --user backoff=
 
   [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying
-- =apt install atools=
+- =apt install atool=
 
-  [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format
+  [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format. Only necessary if you want to use compression.
 """
 
 import argparse
@@ -130,13 +130,19 @@ Compression = Optional[str]
 
 
 def apack(data: bytes, compression: Compression) -> bytes:
+    dev_stdout = '/dev/stdout'
     if compression is None:
         return data
+    elif compression == 'zstd': # ugh, apack hasn't been updated for a while and doesn't support it..
+        return check_output([
+            'zstd', '--quiet',
+            '-o', dev_stdout,
+        ], input=data)
     else:
         return check_output([
             'apack',
             '-F', compression,
-            '-f', '/dev/stdout',  # -f flag to convince to 'overwrite' stdout
+            '-f', dev_stdout,  # -f flag to convince to 'overwrite' stdout
         ], input=data)
 
 
@@ -202,7 +208,6 @@ Example: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- 
 Arguments past '--' are the actuall command to run.
 '''.strip(),
  # TODO link?
-        # TODO rename to exportto?
         formatter_class=argparse.RawTextHelpFormatter,
     )
     pss = ', '.join("{" + p + "}" for p in PLACEHOLDERS)
@@ -224,9 +229,9 @@ Example: '/exports/pocket/pocket_{{utcnow}}.json'
     p.add_argument(
         '-c', '--compression',
         help='''
-Set compression format (passed to 'apack -F').
+Set compression format.
 
-See man apack for list of supported formats.
+See 'man apack' for list of supported formats. In addition, 'zstd' is also supported.
 '''.strip(),
         default=None,
     )
