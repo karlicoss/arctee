@@ -13,7 +13,7 @@ You can read more on how it's used [[https://beepb00p.xyz/exports.html#arctee][h
 Many things are very common to all data exports, regardless the source.
 In the vast majority of cases you want to fetch some data, save it in a json file along with a timestamp and potentially compress.
 
-This script aims to minimize common boilerplate:
+This script aims to minimize the common boilerplate:
 
 - =path= argument allows easy ISO8601 timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
 - =--compression= allows to compress simply by passing format. No more =tar -zcvf=!
