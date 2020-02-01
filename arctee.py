@@ -71,10 +71,10 @@ If you think any of these things can be simplified, I'd be happy to know and rem
 - =pip3 install --user atomicwrites=
 
   [[https://github.com/untitaker/python-atomicwrites][atomicwrites]] is a library for portable atomic file writing
-- =pip3 install --user backoff=
+- =pip3 install --user backoff= (optional)
 
-  [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying
-- =apt install atool=
+  [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying. Only necessary if you want to use --retries--.
+- =apt install atool= (optional)
 
   [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format. Only necessary if you want to use compression.
 """
@@ -87,7 +87,6 @@ from typing import Sequence, Optional
 
 
 from atomicwrites import atomic_write
-import backoff # type: ignore
 
 
 def get_logger():
@@ -165,9 +164,13 @@ def do_command(command: str) -> bytes:
     return r.stdout
 
 
-def get_stdout(*, retries: int, compression: Compression, command: str):
-    retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries, logger=get_logger())
-    stdout = retrier(lambda: do_command(command))()
+def get_stdout(*, retries: Optional[int], compression: Compression, command: str):
+    if retries is not None:
+        import backoff # type: ignore
+        retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries, logger=get_logger())
+        stdout = retrier(lambda: do_command(command))()
+    else:
+        stdout = do_command(command)
     stdout = apack(data=stdout, compression=compression)
     return stdout
 
@@ -175,7 +178,7 @@ def get_stdout(*, retries: int, compression: Compression, command: str):
 def do_export(
         *,
         path: str,
-        retries: int,
+        retries: Optional[int],
         compression: Compression,
         command: Sequence[str],
 ) -> None:
@@ -221,9 +224,9 @@ Example: '/exports/pocket/pocket_{{utcnow}}.json'
     # TODO add argument to treat path as is?
     p.add_argument(
         '-r', '--retries',
-        help='Number of retries (exponential backoff)',
+        help='Total number of tries, 1 (default) means only try once. Uses exponential backoff.',
         type=int,
-        default=1,
+        default=None,
     )
     # TODO eh, ignore it?
     p.add_argument(
