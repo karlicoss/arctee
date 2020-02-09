@@ -17,24 +17,24 @@ It works kind of like [[https://en.wikipedia.org/wiki/Tee_(command)][*tee* comma
 You can read more on how it's used [[https://beepb00p.xyz/exports.html#arctee][here]].
 
 * Motivation
-Many things are very common to all data exports, regardless the source.
-In the vast majority of cases you want to fetch some data, save it in a json file along with a timestamp and potentially compress.
+Many things are very common to all data exports, regardless of the source.
+In the vast majority of cases, you want to fetch some data, save it in a file (e.g. JSON) along with a timestamp and potentially compress.
 
 This script aims to minimize the common boilerplate:
 
 - =path= argument allows easy ISO8601 timestamping and guarantees atomic writing, so you'd never end up with corrupted exports.
-- =--compression= allows to compress simply by passing format. No more =tar -zcvf=!
+- =--compression= allows to compress simply by passing the extension. No more =tar -zcvf=!
 - =--retries= allows easy exponential backoff in case service you're querying is flaky.
 
 Example:
 
-: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py
+: arctee '/exports/rtm/{utcnow}.ical.zstd' --compression zstd --retries 3 -- /soft/export/rememberthemilk.py
 
 1. runs =/soft/export/rememberthemilk.py=, retrying it up to three times if it fails
 
    The script is expected to dump its result in stdout; stderr is simply passed through.
-2. once the data is fetched it's compressed as =xz=
-3. timestamp is computed and compressed data is written to =/exports/rtm/20200102T170015Z.ical.xz=
+2. once the data is fetched it's compressed as =zstd=
+3. timestamp is computed and compressed data is written to =/exports/rtm/20200102T170015Z.ical.zstd=
 
 * Do you really need a special script for that?
 
@@ -99,7 +99,7 @@ usage: arctee.py [-h] [-r RETRIES] [-c COMPRESSION] path
 
 Wrapper for automating boilerplate for reliable and regular data exports.
 
-Example: arctee '/exports/rtm/{utcnow}.ical.xz' --compression xz --retries 3 -- /soft/export/rememberthemilk.py --user "user@email.com"
+Example: arctee '/exports/rtm/{utcnow}.ical.zstd' --compression zstd --retries 3 -- /soft/export/rememberthemilk.py --user "user@email.com"
 
 Arguments past '--' are the actuall command to run.
 
@@ -120,5 +120,4 @@ optional arguments:
                         See 'man apack' for list of supported formats. In addition, 'zstd' is also supported.
 #+end_example
 
-  
-* TODOs :noexport:
+* TODOs                                                            :noexport:
