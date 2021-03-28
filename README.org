@@ -104,7 +104,7 @@ Example: arctee '/exports/rtm/{utcnow}.ical.zstd' --compression zstd --retries 3
 Arguments past '--' are the actuall command to run.
 
 positional arguments:
-  path                  Path with borg-style placeholders. Supported: {utcnow}, {hostname}.
+  path                  Path with borg-style placeholders. Supported: {utcnow}, {hostname}, {platform}.
                         
                         Example: '/exports/pocket/pocket_{utcnow}.json'
                         

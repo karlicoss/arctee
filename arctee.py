@@ -79,6 +79,7 @@ If you think any of these things can be simplified, I'd be happy to know and rem
   [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format. Only necessary if you want to use compression.
 """
 
+import sys
 import argparse
 from pathlib import Path
 import logging
@@ -110,11 +111,16 @@ def hostname() -> str:
     return socket.gethostname()
 
 
+def platform() -> str:
+    return sys.platform
+
+
 # don't think anything standard for that exists?
 # https://github.com/borgbackup/borg/blob/d02356e9c06f980b3d53459c6cc9c264d23d499e/src/borg/helpers/parseformat.py#L205
 PLACEHOLDERS = {
     'utcnow'  : utcnow,
     'hostname': hostname,
+    'platform': platform,
 }
 
 
