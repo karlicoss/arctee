@@ -67,14 +67,17 @@ Sadly, there are serious caveats:
 It feels that cron isn't a suitable tool for my needs due to pipe handling and the need for retries, however I haven't found a better alternative.
 If you think any of these things can be simplified, I'd be happy to know and remove them in favor of more standard solutions!
 
-* Dependencies
-- =pip3 install --user atomicwrites=
+* Installation
 
-  [[https://github.com/untitaker/python-atomicwrites][atomicwrites]] is a library for portable atomic file writing
-- =pip3 install --user backoff= (optional)
+This can be installed with pip by running: =pip3 install --user 'git+https://github.com/karlicoss/arctee'=
+
+You can also manually install this by installing =atomicwrites= (=pip3 install atomicwrites=) and downloading and running =arctee.py= directly
+
+** Optional Dependencies
+- =pip3 install --user backoff=
 
   [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying. Only necessary if you want to use --retries--.
-- =apt install atool= (optional)
+- =apt install atool=
 
   [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format. Only necessary if you want to use compression.
 """
