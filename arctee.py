@@ -69,7 +69,7 @@ If you think any of these things can be simplified, I'd be happy to know and rem
 
 * Installation
 
-This can be installed with pip by running: =pip3 install --user 'git+https://github.com/karlicoss/arctee'=
+This can be installed with pip by running: =pip3 install --user git+https://github.com/karlicoss/arctee=
 
 You can also manually install this by installing =atomicwrites= (=pip3 install atomicwrites=) and downloading and running =arctee.py= directly
 
