@@ -134,24 +134,25 @@ def replace_placeholders(s) -> str:
     return s.format(**pdict)
 
 
-Compression = Optional[str]
-
-
-def apack(data: bytes, compression: Compression) -> bytes:
+def get_compression_cmd(compression: str) -> str:
     dev_stdout = '/dev/stdout'
-    if compression is None:
-        return data
-    elif compression == 'zstd': # ugh, apack hasn't been updated for a while and doesn't support it..
-        return check_output([
+    if compression == 'zstd': # ugh, apack hasn't been updated for a while and doesn't support it..
+        return ' '.join([
             'zstd', '--quiet',
             '-o', dev_stdout,
-        ], input=data)
+        ])
     else:
-        return check_output([
+        return ' '.join([
             'apack',
             '-F', compression,
             '-f', dev_stdout,  # -f flag to convince to 'overwrite' stdout
-        ], input=data)
+        ])
+
+
+def compress(data: bytes, compression_cmd: Optional[str]) -> bytes:
+    if compression_cmd is None:
+        return data
+    return check_output(compression_cmd.split(), input=data)
 
 
 def do_command(command: str) -> bytes:
@@ -173,14 +174,14 @@ def do_command(command: str) -> bytes:
     return r.stdout
 
 
-def get_stdout(*, retries: Optional[int], compression: Compression, command: str):
+def get_stdout(*, retries: Optional[int], compression_cmd: Optional[str], command: str):
     if retries is not None:
         import backoff # type: ignore
         retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries, logger=get_logger())
         stdout = retrier(lambda: do_command(command))()
     else:
         stdout = do_command(command)
-    stdout = apack(data=stdout, compression=compression)
+    stdout = compress(data=stdout, compression_cmd=compression_cmd)
     return stdout
 
 
@@ -188,9 +189,17 @@ def do_export(
         *,
         path: str,
         retries: Optional[int],
-        compression: Compression,
+        compression_cmd: Optional[str],
+        compression: Optional[str],
         command: Sequence[str],
 ) -> None:
+    if compression_cmd is None:
+        if compression is None:
+            compression_cmd = None
+        else:
+            compression_cmd = get_compression_cmd(compression)
+
+
     logger = get_logger()
     assert len(command) > 0
 
@@ -198,7 +207,7 @@ def do_export(
 
     commands = ' '.join(map(quote, command))  # deliberate shell-like behaviour
 
-    stdout = get_stdout(command=commands, retries=retries, compression=compression)
+    stdout = get_stdout(command=commands, retries=retries, compression_cmd=compression_cmd)
 
     path = replace_placeholders(path)
 
@@ -237,13 +246,20 @@ Example: '/exports/pocket/pocket_{{utcnow}}.json'
         type=int,
         default=None,
     )
-    # TODO eh, ignore it?
-    p.add_argument(
+    cg = p.add_mutually_exclusive_group()
+    cg.add_argument(
         '-c', '--compression',
         help='''
 Set compression format.
 
 See 'man apack' for list of supported formats. In addition, 'zstd' is also supported.
+'''.strip(),
+        default=None,
+    )
+    cg.add_argument(
+        '--compression-cmd', '--ccmd',
+        help='''
+Use the command to compress. E.g. --ccmd 'zstd -9 --quiet -o /dev/stdout'
 '''.strip(),
         default=None,
     )
@@ -262,11 +278,11 @@ See 'man apack' for list of supported formats. In addition, 'zstd' is also suppo
     if command[0] == '--':
         del command[0]
 
-    do_export(path=path, retries=args.retries, compression=args.compression, command=command)
+    do_export(path=path, retries=args.retries, compression=args.compression, compression_cmd=args.compression_cmd, command=command)
 
 
-def test(tmp_path):
-    bdir = Path(tmp_path)
+def test(tmp_path: Path) -> None:
+    bdir = tmp_path
 
     def run(**kwargs):
         do_export(
@@ -277,24 +293,24 @@ def test(tmp_path):
             **kwargs,
         )
 
-    run(compression=None)
+    run(compression=None, compression_cmd=None)
     [ff] = list(bdir.glob('*.txt'))
     assert ff.stat().st_size == 1000
 
-    run(compression='xz')
+    run(compression='xz', compression_cmd=None)
     # note that extension has to be in sync with --compression argument at the moment...
     # wish apack had some sort of 'noop' mode...
     [xz] = list(bdir.glob('*.txt'))
     assert xz.stat().st_size == 76
 
 
-def test_retry(tmp_path):
+def test_retry(tmp_path: Path) -> None:
     """
     Ideally, should fail for a while and then succeed.
 
     # eh. do not run on ci? not sure..
     """
-    bdir = Path(tmp_path)
+    bdir = tmp_path
 
     from subprocess import check_call
 
