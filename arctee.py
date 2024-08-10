@@ -86,7 +86,7 @@ import sys
 import argparse
 from pathlib import Path
 import logging
-from subprocess import Popen, PIPE, run, CalledProcessError, check_output
+from subprocess import PIPE, run, CalledProcessError, check_output
 from typing import Sequence, Optional
 
 
