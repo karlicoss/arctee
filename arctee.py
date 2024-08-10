@@ -84,6 +84,7 @@ You can also manually install this by installing =atomicwrites= (=pip3 install a
 
 import sys
 import argparse
+from datetime import datetime, timezone
 from pathlib import Path
 import logging
 from subprocess import PIPE, run, CalledProcessError, check_output
@@ -105,8 +106,10 @@ _ISO_FORMAT = '%Y%m%dT%H%M%SZ'
 
 
 def utcnow() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).strftime(_ISO_FORMAT)
+    # could use .isoformat() here, but
+    # - it also adds microseconds, kinda unnecessary here
+    # - it formats timezone as +00:00, also kinda annoying
+    return datetime.now(tz=timezone.utc).strftime(_ISO_FORMAT)
 
 
 def hostname() -> str:
@@ -217,7 +220,7 @@ def do_export(
         fo.write(stdout)
 
 
-def main():
+def main() -> None:
     setup_logging()
 
     p = argparse.ArgumentParser(
