@@ -1,6 +1,0 @@
-#!/bin/bash
-set -eux
-ERRORS=0
-ruff check arctee.py || ERRORS=1
-mypy       arctee.py || ERRORS=1
-exit $ERRORS

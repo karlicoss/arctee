@@ -82,23 +82,24 @@ You can also manually install this by installing =atomicwrites= (=pip3 install a
   [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format. Only necessary if you want to use compression.
 """
 
-import sys
 import argparse
-from datetime import datetime, timezone
-from pathlib import Path
 import logging
-from subprocess import PIPE, run, CalledProcessError, check_output
-from typing import Sequence, Optional
+import shlex
+import socket
+import sys
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from pathlib import Path
+from subprocess import CalledProcessError, check_output, run
+
+from atomicwrites import atomic_write  # type: ignore[import-untyped]
 
 
-from atomicwrites import atomic_write
-
-
-def get_logger():
+def get_logger() -> logging.Logger:
     return logging.getLogger('arctee')
 
 
-def setup_logging():
+def setup_logging() -> None:
     logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
 
@@ -109,11 +110,10 @@ def utcnow() -> str:
     # could use .isoformat() here, but
     # - it also adds microseconds, kinda unnecessary here
     # - it formats timezone as +00:00, also kinda annoying
-    return datetime.now(tz=timezone.utc).strftime(_ISO_FORMAT)
+    return datetime.now(tz=UTC).strftime(_ISO_FORMAT)
 
 
 def hostname() -> str:
-    import socket
     return socket.gethostname()
 
 
@@ -127,32 +127,31 @@ PLACEHOLDERS = {
     'utcnow'  : utcnow,
     'hostname': hostname,
     'platform': platform,
-}
+}  # fmt: skip
 
 
 def replace_placeholders(s) -> str:
-    pdict = {
-        k: v() for k, v in PLACEHOLDERS.items()
-    }
+    pdict = {k: v() for k, v in PLACEHOLDERS.items()}
     return s.format(**pdict)
 
 
 def get_compression_cmd(compression: str) -> str:
     dev_stdout = '/dev/stdout'
-    if compression == 'zstd': # ugh, apack hasn't been updated for a while and doesn't support it..
-        return ' '.join([
+    if compression == 'zstd':  # ugh, apack hasn't been updated for a while and doesn't support it..
+        # TODO use python zstd? esp in 3.14 -- not sure
+        return shlex.join([
             'zstd', '--quiet',
             '-o', dev_stdout,
-        ])
+        ])  # fmt: skip
     else:
-        return ' '.join([
+        return shlex.join([
             'apack',
             '-F', compression,
             '-f', dev_stdout,  # -f flag to convince to 'overwrite' stdout
-        ])
+        ])  # fmt: skip
 
 
-def compress(data: bytes, compression_cmd: Optional[str]) -> bytes:
+def compress(data: bytes, compression_cmd: str | None) -> bytes:
     if compression_cmd is None:
         return data
     return check_output(compression_cmd.split(), input=data)
@@ -162,7 +161,7 @@ def do_command(command: str) -> bytes:
     logger = get_logger()
     logger.debug(f"Running '{command}'")
 
-    r = run(command, shell=True, stdout=PIPE, stderr=PIPE)
+    r = run(command, shell=True, capture_output=True, check=False)
 
     errmsg = f"Stderr: {r.stderr.decode('utf8')}"
     if r.returncode != 0:
@@ -177,10 +176,13 @@ def do_command(command: str) -> bytes:
     return r.stdout
 
 
-def get_stdout(*, retries: Optional[int], compression_cmd: Optional[str], command: str):
+def get_stdout(*, retries: int | None, compression_cmd: str | None, command: str):
     if retries is not None:
-        import backoff # type: ignore
-        retrier = backoff.on_exception(backoff.expo, exception=CalledProcessError, max_tries=retries, logger=get_logger())
+        import backoff
+
+        retrier = backoff.on_exception(
+            backoff.expo, exception=CalledProcessError, max_tries=retries, logger=get_logger()
+        )
         stdout = retrier(lambda: do_command(command))()
     else:
         stdout = do_command(command)
@@ -189,12 +191,12 @@ def get_stdout(*, retries: Optional[int], compression_cmd: Optional[str], comman
 
 
 def do_export(
-        *,
-        path: str,
-        retries: Optional[int],
-        compression_cmd: Optional[str],
-        compression: Optional[str],
-        command: Sequence[str],
+    *,
+    path: str,
+    retries: int | None,
+    compression_cmd: str | None,
+    compression: str | None,
+    command: Sequence[str],
 ) -> None:
     if compression_cmd is None:
         if compression is None:
@@ -202,13 +204,10 @@ def do_export(
         else:
             compression_cmd = get_compression_cmd(compression)
 
-
     logger = get_logger()
     assert len(command) > 0
 
-    from shlex import quote # TODO ok, careful about it...
-
-    commands = ' '.join(map(quote, command))  # deliberate shell-like behaviour
+    commands = shlex.join(command)  # deliberate shell-like behaviour
 
     stdout = get_stdout(command=commands, retries=retries, compression_cmd=compression_cmd)
 
@@ -231,27 +230,33 @@ Example: arctee '/exports/rtm/{utcnow}.ical.zstd' --compression zstd --retries 3
 
 Arguments past '--' are the actuall command to run.
 '''.strip(),
- # TODO link?
+        # TODO link?
         formatter_class=argparse.RawTextHelpFormatter,
     )
     pss = ', '.join("{" + p + "}" for p in PLACEHOLDERS)
-    p.add_argument('path', type=str, help=f"""
+    p.add_argument(
+        'path',
+        type=str,
+        help=f"""
 Path with borg-style placeholders. Supported: {pss}.
 
 Example: '/exports/pocket/pocket_{{utcnow}}.json'
 
 (see https://manpages.debian.org/testing/borgbackup/borg-placeholders.1.en.html)
-""".strip())
+""".strip(),
+    )
     # TODO add argument to treat path as is?
     p.add_argument(
-        '-r', '--retries',
+        '-r',
+        '--retries',
         help='Total number of tries, 1 (default) means only try once. Uses exponential backoff.',
         type=int,
         default=None,
     )
     cg = p.add_mutually_exclusive_group()
     cg.add_argument(
-        '-c', '--compression',
+        '-c',
+        '--compression',
         help='''
 Set compression format.
 
@@ -260,7 +265,8 @@ See 'man apack' for list of supported formats. In addition, 'zstd' is also suppo
         default=None,
     )
     cg.add_argument(
-        '--compression-cmd', '--ccmd',
+        '--compression-cmd',
+        '--ccmd',
         help='''
 Use the command to compress. E.g. --ccmd 'zstd -9 --quiet -o /dev/stdout'
 '''.strip(),
@@ -281,17 +287,22 @@ Use the command to compress. E.g. --ccmd 'zstd -9 --quiet -o /dev/stdout'
     if command[0] == '--':
         del command[0]
 
-    do_export(path=path, retries=args.retries, compression=args.compression, compression_cmd=args.compression_cmd, command=command)
+    do_export(
+        path=path,
+        retries=args.retries,
+        compression=args.compression,
+        compression_cmd=args.compression_cmd,
+        command=command,
+    )
 
 
-def test(tmp_path: Path) -> None:
+def test_basic(tmp_path: Path) -> None:
     bdir = tmp_path
 
-    def run(**kwargs):
+    def run(**kwargs) -> None:
         do_export(
             path=str(bdir / 'test_{utcnow}_{hostname}.txt'),
             retries=1,
-            # TODO test backoff?
             command=['printf', '0' * 1000],
             **kwargs,
         )
@@ -299,33 +310,38 @@ def test(tmp_path: Path) -> None:
     run(compression=None, compression_cmd=None)
     [ff] = list(bdir.glob('*.txt'))
     assert ff.stat().st_size == 1000
+    ff.unlink()
 
-    run(compression='xz', compression_cmd=None)
+    run(compression='zstd', compression_cmd=None)
     # note that extension has to be in sync with --compression argument at the moment...
     # wish apack had some sort of 'noop' mode...
     [xz] = list(bdir.glob('*.txt'))
-    assert xz.stat().st_size == 76
+    assert xz.stat().st_size <= 100
+
+    orig = check_output(['zstdcat', xz], text=True)
+    assert orig == '0' * 1000
 
 
 def test_retry(tmp_path: Path) -> None:
     """
     Ideally, should fail for a while and then succeed.
-
-    # eh. do not run on ci? not sure..
     """
-    bdir = tmp_path
-
+    from pathlib import Path
     from subprocess import check_call
 
-    cmd = [
-        __file__,
-        str(bdir / 'xxx_{utcnow}.html.xz'),
-        '-c', 'xz',
+    thisfile = Path(__file__).absolute()
+    target = tmp_path / f'xxx_{utcnow}.zstd'
+
+    cmd: list[Path | str] = [
+        __file__, # TODO meh
+        target,
+        '-c', 'zstd',
         '--retries', '10',  # TODO
         '--',
-        'bash', '-c', '((RANDOM % 3 == 0)) && cat /usr/share/doc/python3/html/bugs.html',
-    ]
+        'bash', '-c', f'((RANDOM % 3 == 0)) && cat {thisfile}',
+    ]  # fmt: skip
     check_call(cmd)
+    assert target.exists()
 
 
 if __name__ == '__main__':
