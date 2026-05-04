@@ -78,12 +78,9 @@ If you think any of these things can be simplified, I'd be happy to know and rem
 
 This can be installed with pip by running: =pip3 install --user git+https://github.com/karlicoss/arctee=
 
-You can also manually install this by installing =atomicwrites= (=pip3 install atomicwrites=) and downloading and running =arctee.py= directly
+You can also manually install this by installing =boltons= (=pip3 install boltons=) and downloading and running =arctee.py= directly.
 
 ** Optional Dependencies
-- =pip3 install --user backoff=
-
-  [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying. Only necessary if you want to use --retries--.
 - =apt install atool=
 
   [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format. Only necessary if you want to use compression.
