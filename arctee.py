@@ -71,12 +71,9 @@ If you think any of these things can be simplified, I'd be happy to know and rem
 
 This can be installed with pip by running: =pip3 install --user git+https://github.com/karlicoss/arctee=
 
-You can also manually install this by installing =atomicwrites= (=pip3 install atomicwrites=) and downloading and running =arctee.py= directly
+You can also manually install this by installing =boltons= (=pip3 install boltons=) and downloading and running =arctee.py= directly
 
 ** Optional Dependencies
-- =pip3 install --user backoff=
-
-  [[https://github.com/litl/backoff][backoff]] is a library to simplify backoff and retrying. Only necessary if you want to use --retries--.
 - =apt install atool=
 
   [[https://www.nongnu.org/atool][atool]] is a tool to create archives in any format. Only necessary if you want to use compression.
@@ -87,12 +84,15 @@ import logging
 import shlex
 import socket
 import sys
+import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from subprocess import CalledProcessError, check_output, run
 
-from atomicwrites import atomic_write  # type: ignore[import-untyped]
+# ffs doesn't have type annotations... https://github.com/mahmoud/boltons/issues/190
+from boltons.fileutils import atomic_save  # type: ignore[import-untyped]
+from boltons.iterutils import backoff  # type: ignore[import-untyped]
 
 
 def get_logger() -> logging.Logger:
@@ -176,16 +176,22 @@ def do_command(command: str) -> bytes:
     return r.stdout
 
 
-def get_stdout(*, retries: int | None, compression_cmd: str | None, command: str):
-    if retries is not None:
-        import backoff
-
-        retrier = backoff.on_exception(
-            backoff.expo, exception=CalledProcessError, max_tries=retries, logger=get_logger()
-        )
-        stdout = retrier(lambda: do_command(command))()
+def get_stdout(*, retries: int, compression_cmd: str | None, command: str) -> bytes:
+    assert retries > 0  # just in case
+    logger = get_logger()
+    delays = backoff(start=1.0, stop=60.0, count=retries)
+    for attempt, delay in enumerate(delays):
+        try:
+            stdout = do_command(command)
+            break
+        except CalledProcessError:
+            if attempt + 1 >= retries:
+                raise
+            logger.debug(f'retrying command after {delay:.1f}s ({attempt + 1}/{retries})')
+            time.sleep(delay)
     else:
-        stdout = do_command(command)
+        raise RuntimeError("Should not happen!")
+
     stdout = compress(data=stdout, compression_cmd=compression_cmd)
     return stdout
 
@@ -193,7 +199,7 @@ def get_stdout(*, retries: int | None, compression_cmd: str | None, command: str
 def do_export(
     *,
     path: str,
-    retries: int | None,
+    retries: int,
     compression_cmd: str | None,
     compression: str | None,
     command: Sequence[str],
@@ -215,7 +221,7 @@ def do_export(
 
     logger.debug("writing %d bytes to %s", len(stdout), path)
 
-    with atomic_write(path, mode='wb', overwrite=True) as fo:
+    with atomic_save(path, overwrite=True) as fo:
         fo.write(stdout)
 
 
@@ -251,7 +257,7 @@ Example: '/exports/pocket/pocket_{{utcnow}}.json'
         '--retries',
         help='Total number of tries, 1 (default) means only try once. Uses exponential backoff.',
         type=int,
-        default=None,
+        default=1,
     )
     cg = p.add_mutually_exclusive_group()
     cg.add_argument(

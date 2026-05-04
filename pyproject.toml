@@ -3,7 +3,7 @@
 dynamic = ["version"]  # version is managed by build backend
 name = "arctee"
 dependencies = [
-    "atomicwrites",
+    "boltons",  # for atomic writes and retries
 ]
 requires-python = ">=3.12"
 
@@ -17,12 +17,6 @@ maintainers = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.c
 Homepage = "https://github.com/karlicoss/arctee"
 ##
 
-
-[project.optional-dependencies]
-backoff = [
-    "backoff",
-]
-
 [dependency-groups]
 # TODO: not sure, on the one hand could just use 'standard' dev dependency group
 # On the other hand, it's a bit annoying that it's always included by default? 
@@ -30,9 +24,6 @@ backoff = [
 testing = [
     "pytest>=9",  # need version 9 for proper namespace package support
     "ruff",
-
-    # example of including optional dependencies in dependency groups
-    "arctee[backoff]",
 ]
 typecheck = [
     "mypy",
