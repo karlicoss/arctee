@@ -1,0 +1,63 @@
+# see https://github.com/karlicoss/pymplate for up-to-date reference
+[project]
+dynamic = ["version"]  # version is managed by build backend
+name = "arctee"
+dependencies = [
+    "atomicwrites",
+]
+requires-python = ">=3.12"
+
+## these are only useful for pypi
+description = "Atomic tee "  # shows on project page/in search
+license     = {file = "LICENSE"}
+authors     = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"}]
+maintainers = [{name = "Dima Gerasimov (@karlicoss)", email = "karlicoss@gmail.com"}]
+
+[project.urls]  # pypi will fetch some github stats/link, so somewhat useful
+Homepage = "https://github.com/karlicoss/arctee"
+##
+
+
+[project.optional-dependencies]
+backoff = [
+    "backoff",
+]
+
+[dependency-groups]
+# TODO: not sure, on the one hand could just use 'standard' dev dependency group
+# On the other hand, it's a bit annoying that it's always included by default? 
+# To make sure it's not included, need to use `uv run --exact --no-default-groups ...`
+testing = [
+    "pytest>=9",  # need version 9 for proper namespace package support
+    "ruff",
+
+    # example of including optional dependencies in dependency groups
+    "arctee[backoff]",
+]
+typecheck = [
+    "mypy",
+    "lxml", # for mypy html coverage
+    "ty>=0.0.34",
+
+    { include-group = "testing" },
+]
+
+
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+# # unfortunately have to duplicate project name here atm, see https://github.com/pypa/hatch/issues/1894
+# [tool.hatch.build.targets.wheel]
+# packages = ["src/karlicoss_pymplate"]
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+version_scheme = "python-simplified-semver"
+local_scheme = "dirty-tag"
+
+
+[project.scripts]
+arctee = 'arctee:main'
