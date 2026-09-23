@@ -88,7 +88,7 @@ import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from subprocess import CalledProcessError, check_output, run
+from subprocess import PIPE, CalledProcessError, check_output, run
 
 # ffs doesn't have type annotations... https://github.com/mahmoud/boltons/issues/190
 from boltons.fileutils import atomic_save  # type: ignore[import-untyped]
@@ -161,18 +161,16 @@ def do_command(command: str) -> bytes:
     logger = get_logger()
     logger.debug(f"Running '{command}'")
 
-    r = run(command, shell=True, capture_output=True, check=False)
+    # Inherit stderr so progress and interactive prompts are visible while the command runs.
+    r = run(command, shell=True, stdout=PIPE, check=False)
 
-    errmsg = f"Stderr: {r.stderr.decode('utf8')}"
     if r.returncode != 0:
-        logger.error(errmsg)
         logger.error(f"Stdout: {r.stdout.decode('utf8')}")
         error = f"Non-zero return code: {r.returncode}"
         logger.error(error)
         r.check_returncode()
         raise AssertionError("shouldn't happen")
 
-    logger.info(errmsg)
     return r.stdout
 
 
@@ -326,6 +324,59 @@ def test_basic(tmp_path: Path) -> None:
 
     orig = check_output(['zstdcat', xz], text=True)
     assert orig == '0' * 1000
+
+
+def test_interactive_stderr(tmp_path: Path) -> None:
+    import json
+    import select
+    from subprocess import Popen
+
+    import pytest
+
+    if sys.platform == 'win32':
+        pytest.skip('select on subprocess pipes requires POSIX')
+
+    target = tmp_path / 'interactive.json.zst'
+    child = "import json, sys; print('value: ', file=sys.stderr, end='', flush=True); print(json.dumps(input()))"
+    wrapper = (
+        'import arctee; '
+        f'arctee.do_export(path={str(target)!r}, retries=1, compression="zstd", compression_cmd=None, '
+        f'command={[sys.executable, "-c", child]!r})'
+    )
+    with Popen([sys.executable, '-c', wrapper], stdin=PIPE, stdout=PIPE, stderr=PIPE) as process:
+        assert process.stderr is not None
+        try:
+            ready, _, _ = select.select([process.stderr], [], [], 10)
+            assert len(ready) > 0, 'Prompt was not visible before input'
+            assert process.stderr.read(7) == b'value: '
+            assert not target.exists()
+        finally:
+            stdout, stderr = process.communicate(b'answer\n', timeout=10)
+        assert process.returncode == 0, stderr
+        assert stdout == b''
+    assert json.loads(check_output(['zstdcat', target])) == 'answer'
+
+
+def test_failure_does_not_write_export(tmp_path: Path, capfd) -> None:
+    import pytest
+
+    target = tmp_path / 'failed.json.zst'
+    with pytest.raises(CalledProcessError) as raised:
+        do_export(
+            path=str(target),
+            retries=1,
+            compression='zstd',
+            compression_cmd=None,
+            command=[
+                sys.executable,
+                '-c',
+                "import sys; print('partial'); print('failed', file=sys.stderr); sys.exit(1)",
+            ],
+        )
+    assert raised.value.returncode == 1
+    assert raised.value.stdout == b'partial\n'
+    assert capfd.readouterr().err == 'failed\n'
+    assert not target.exists()
 
 
 def test_retry(tmp_path: Path) -> None:
