@@ -379,26 +379,57 @@ def test_failure_does_not_write_export(tmp_path: Path, capfd) -> None:
     assert not target.exists()
 
 
-def test_retry(tmp_path: Path) -> None:
-    """
-    Ideally, should fail for a while and then succeed.
-    """
-    from pathlib import Path
-    from subprocess import check_call
+def _retry_test_command(*, target: Path, counter: Path, retries: int) -> list[str | Path]:
+    counter.write_text('0')
+    child = """
+import sys
+from pathlib import Path
 
-    thisfile = Path(__file__).absolute()
-    target = tmp_path / f'xxx_{utcnow}.zstd'
-
-    cmd: list[Path | str] = [
-        __file__, # TODO meh
+counter = Path(sys.argv[1])
+attempt = int(counter.read_text()) + 1
+counter.write_text(str(attempt))
+if attempt < 3:
+    print('partial')
+    sys.exit(1)
+print('success')
+"""
+    return [
+        sys.executable, '-m', 'arctee',
         target,
         '-c', 'zstd',
-        '--retries', '10',  # TODO
+        '--retries', str(retries),
         '--',
-        'bash', '-c', f'((RANDOM % 3 == 0)) && cat {thisfile}',
+        sys.executable, '-c', child, counter,
     ]  # fmt: skip
-    check_call(cmd)
-    assert target.exists()
+
+
+def test_retry(tmp_path: Path) -> None:
+    """The CLI retries two failures, then exports only the successful third attempt as zstd."""
+    target = tmp_path / 'export.zstd'
+    counter = tmp_path / 'attempts'
+    cmd = _retry_test_command(target=target, counter=counter, retries=3)
+
+    result = run(cmd, check=True, capture_output=True, timeout=30)
+
+    assert counter.read_text() == '3'
+    assert result.stdout == b''
+    assert check_output(['zstdcat', target]) == b'success\n'
+
+
+def test_retry_exhausted(tmp_path: Path) -> None:
+    """The CLI stops after two failed attempts and leaves no export file."""
+    import pytest
+
+    target = tmp_path / 'export.zstd'
+    counter = tmp_path / 'attempts'
+    cmd = _retry_test_command(target=target, counter=counter, retries=2)
+
+    with pytest.raises(CalledProcessError) as raised:
+        run(cmd, check=True, capture_output=True, timeout=30)
+
+    assert raised.value.returncode == 1
+    assert counter.read_text() == '2'
+    assert not target.exists()
 
 
 if __name__ == '__main__':
