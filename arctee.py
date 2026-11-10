@@ -288,6 +288,8 @@ Use the command to compress. E.g. --ccmd 'zstd -9 --quiet -o /dev/stdout'
     command = rest
     # https://stackoverflow.com/questions/25872515/python-argparse-treat-arguments-in-different-ways#comment52606932_25873028
 
+    if len(command) == 0:
+        p.error('no command supplied (pass the command to run after --)')
     if command[0] == '--':
         del command[0]
 
@@ -376,6 +378,16 @@ def test_failure_does_not_write_export(tmp_path: Path, capfd) -> None:
     assert raised.value.returncode == 1
     assert raised.value.stdout == b'partial\n'
     assert capfd.readouterr().err == 'failed\n'
+    assert not target.exists()
+
+
+def test_no_command_exits_with_usage_error(tmp_path: Path) -> None:
+    target = tmp_path / 'export.txt'
+    cmd = [sys.executable, '-m', 'arctee', str(target)]
+    result = run(cmd, check=False, capture_output=True, timeout=30)
+    assert result.returncode == 2
+    assert b'Traceback' not in result.stderr
+    assert b'no command supplied' in result.stderr
     assert not target.exists()
 
 
